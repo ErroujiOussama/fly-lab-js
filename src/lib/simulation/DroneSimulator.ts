@@ -13,6 +13,15 @@ export interface SimulationConfig {
   enableControl: boolean;
 }
 
+export type FlightMode = 'manual' | 'stabilized' | 'altitude_hold' | 'position_hold';
+
+export interface ManualInputs {
+  pitch: number;    // [-1, 1] - forward/backward stick
+  roll: number;     // [-1, 1] - left/right stick  
+  yaw: number;      // [-1, 1] - rotation stick
+  throttle: number; // [0, 1] - throttle stick
+}
+
 export interface ControllerConfig {
   altitude: {
     kp: number;
@@ -65,6 +74,8 @@ export interface SimulationData {
     positionY: number;
   };
   setpoints: SetPoints;
+  flightMode: FlightMode;
+  manualInputs: ManualInputs;
 }
 
 export class DroneSimulator {
@@ -81,6 +92,8 @@ export class DroneSimulator {
   private positionYController: CascadedPIDController;
   
   private setpoints: SetPoints;
+  private flightMode: FlightMode;
+  private manualInputs: ManualInputs;
   private currentTime: number;
   private isRunning: boolean;
   private animationId: number | null = null;
@@ -98,6 +111,13 @@ export class DroneSimulator {
     this.drone = new DroneModel();
     this.currentTime = 0;
     this.isRunning = false;
+    this.flightMode = 'position_hold';
+    this.manualInputs = {
+      pitch: 0,
+      roll: 0,
+      yaw: 0,
+      throttle: 0.5
+    };
     
     this.config = {
       timestep: 0.01, // 100Hz simulation
@@ -252,23 +272,58 @@ export class DroneSimulator {
   private controlOutputsToMotorInputs(controlOutputs: any): MotorInputs {
     const { altitude, roll, pitch, yaw } = controlOutputs;
     
-    // Base thrust for hovering (normalized)
-    const baseThrust = 0.65; // Approximately hover thrust
+    let baseThrust: number;
+    let rollInput: number;
+    let pitchInput: number;
+    let yawInput: number;
+
+    // Apply flight mode logic
+    switch (this.flightMode) {
+      case 'manual':
+        // Direct manual control - no stabilization
+        baseThrust = this.manualInputs.throttle;
+        rollInput = this.manualInputs.roll * 0.3;
+        pitchInput = this.manualInputs.pitch * 0.3;
+        yawInput = this.manualInputs.yaw * 0.3;
+        break;
+        
+      case 'stabilized':
+        // Manual throttle + attitude stabilization
+        baseThrust = this.manualInputs.throttle;
+        rollInput = roll + (this.manualInputs.roll * 0.2);
+        pitchInput = pitch + (this.manualInputs.pitch * 0.2);
+        yawInput = yaw + (this.manualInputs.yaw * 0.2);
+        break;
+        
+      case 'altitude_hold':
+        // Altitude hold + manual attitude
+        baseThrust = 0.65 + altitude;
+        rollInput = this.manualInputs.roll * 0.2;
+        pitchInput = this.manualInputs.pitch * 0.2;
+        yawInput = yaw + (this.manualInputs.yaw * 0.2);
+        break;
+        
+      case 'position_hold':
+      default:
+        // Full autonomous mode
+        baseThrust = 0.65 + altitude;
+        rollInput = roll;
+        pitchInput = pitch;
+        yawInput = yaw;
+        break;
+    }
     
     // Combine control outputs
-    const motor1 = baseThrust + altitude + pitch + yaw;  // Front-left
-    const motor2 = baseThrust + altitude + pitch - yaw;  // Front-right
-    const motor3 = baseThrust + altitude - pitch + yaw;  // Rear-left
-    const motor4 = baseThrust + altitude - pitch - yaw;  // Rear-right
+    const motor1 = baseThrust + pitchInput + yawInput;  // Front-left
+    const motor2 = baseThrust + pitchInput - yawInput;  // Front-right
+    const motor3 = baseThrust - pitchInput + yawInput;  // Rear-left
+    const motor4 = baseThrust - pitchInput - yawInput;  // Rear-right
 
-    // Apply roll control
-    const rollAdjustment = roll * 0.3;
-    
     return {
-      motor1: Math.max(0, Math.min(1, motor1 - rollAdjustment)),
-      motor2: Math.max(0, Math.min(1, motor2 + rollAdjustment)),
-      motor3: Math.max(0, Math.min(1, motor3 - rollAdjustment)),
-      motor4: Math.max(0, Math.min(1, motor4 + rollAdjustment))
+      motor1: Math.max(0, Math.min(1, motor1 - rollInput)),
+      motor2: Math.max(0, Math.min(1, motor2 + rollInput)),
+      motor3: Math.max(0, Math.min(1, motor3 - rollInput)),
+      motor4: Math.max(0, Math.min(1, motor4 + rollInput))
     };
   }
 
@@ -280,7 +335,7 @@ export class DroneSimulator {
     let controlOutputs: any;
     let errors: any;
 
-    if (this.config.enableControl) {
+    if (this.config.enableControl && this.flightMode !== 'manual') {
       controlOutputs = this.calculateControlOutputs(state, dt);
       motorInputs = this.controlOutputsToMotorInputs(controlOutputs);
       
@@ -295,8 +350,13 @@ export class DroneSimulator {
       };
     } else {
       // Manual mode or no control
-      motorInputs = { motor1: 0.6, motor2: 0.6, motor3: 0.6, motor4: 0.6 };
-      controlOutputs = { altitude: 0, roll: 0, pitch: 0, yaw: 0, positionX: 0, positionY: 0 };
+      if (this.flightMode === 'manual') {
+        controlOutputs = { altitude: 0, roll: 0, pitch: 0, yaw: 0, positionX: 0, positionY: 0 };
+        motorInputs = this.controlOutputsToMotorInputs(controlOutputs);
+      } else {
+        motorInputs = { motor1: 0.6, motor2: 0.6, motor3: 0.6, motor4: 0.6 };
+        controlOutputs = { altitude: 0, roll: 0, pitch: 0, yaw: 0, positionX: 0, positionY: 0 };
+      }
       errors = { altitude: 0, roll: 0, pitch: 0, yaw: 0, positionX: 0, positionY: 0 };
     }
 
@@ -312,7 +372,9 @@ export class DroneSimulator {
       motorInputs,
       controlOutputs,
       errors,
-      setpoints: { ...this.setpoints }
+      setpoints: { ...this.setpoints },
+      flightMode: this.flightMode,
+      manualInputs: { ...this.manualInputs }
     };
 
     this.dataHistory.push(data);
@@ -407,5 +469,21 @@ export class DroneSimulator {
 
   getSetpoints(): SetPoints {
     return { ...this.setpoints };
+  }
+
+  setFlightMode(mode: FlightMode): void {
+    this.flightMode = mode;
+  }
+
+  getFlightMode(): FlightMode {
+    return this.flightMode;
+  }
+
+  setManualInputs(inputs: Partial<ManualInputs>): void {
+    this.manualInputs = { ...this.manualInputs, ...inputs };
+  }
+
+  getManualInputs(): ManualInputs {
+    return { ...this.manualInputs };
   }
 }

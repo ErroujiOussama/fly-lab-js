@@ -3,10 +3,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DroneSimulator, SimulationData } from '@/lib/simulation/DroneSimulator';
+import { DroneSimulator, SimulationData, FlightMode, ManualInputs } from '@/lib/simulation/DroneSimulator';
 import { DroneVisualization } from './DroneVisualization';
 import { SimulationCharts } from '../charts/SimulationCharts';
 import { ControlPanel } from '../controls/ControlPanel';
+import { ManualControlPanel } from '../controls/ManualControlPanel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -94,6 +95,29 @@ export const DroneSimulationInterface: React.FC = () => {
     }
   };
 
+  const handleFlightModeChange = (mode: FlightMode) => {
+    if (simulatorRef.current) {
+      simulatorRef.current.setFlightMode(mode);
+    }
+  };
+
+  const handleManualInputsChange = (inputs: Partial<ManualInputs>) => {
+    if (simulatorRef.current) {
+      simulatorRef.current.setManualInputs(inputs);
+    }
+  };
+
+  const handleResetManualInputs = () => {
+    if (simulatorRef.current) {
+      simulatorRef.current.setManualInputs({
+        pitch: 0,
+        roll: 0,
+        yaw: 0,
+        throttle: 0.5
+      });
+    }
+  };
+
   // Current state for display
   const droneState = currentData?.state || {
     position: { x: 0, y: 0, z: 0 },
@@ -137,6 +161,15 @@ export const DroneSimulationInterface: React.FC = () => {
     thrustToTorqueRatio: 0.016
   };
 
+  
+  const flightMode = simulatorRef.current?.getFlightMode() || 'position_hold';
+  const manualInputs = simulatorRef.current?.getManualInputs() || {
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    throttle: 0.5
+  };
+
   const simulationConfig = {
     timestep: 0.01,
     realTimeMultiplier: 1.0,
@@ -163,6 +196,10 @@ export const DroneSimulationInterface: React.FC = () => {
             {currentData && (
               <div className="flex items-center gap-4 text-sm">
                 <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Mode:</span>
+                  <span className="font-mono capitalize">{flightMode.replace('_', ' ')}</span>
+                </div>
+                <div className="flex items-center gap-1">
                   <Activity className="h-4 w-4 text-success" />
                   <span className="text-muted-foreground">Time:</span>
                   <span className="font-mono">{currentData.time.toFixed(1)}s</span>
@@ -185,30 +222,55 @@ export const DroneSimulationInterface: React.FC = () => {
         {/* Control Panel */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
           <div className="h-full border-r bg-card/30">
-            <div className="p-4 border-b">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Control Panel
-              </h2>
-            </div>
-            <ScrollArea className="h-[calc(100%-4rem)]">
-              <div className="p-4">
-                <ControlPanel
-                  isRunning={isRunning}
-                  controllerConfig={controllerConfig}
-                  setpoints={setpoints}
-                  droneParams={droneParams}
-                  simulationConfig={simulationConfig}
-                  onStart={handleStart}
-                  onPause={handlePause}
-                  onReset={handleReset}
-                  onControllerConfigChange={handleControllerConfigChange}
-                  onSetpointsChange={handleSetpointsChange}
-                  onDroneParamsChange={handleDroneParamsChange}
-                  onSimulationConfigChange={handleSimulationConfigChange}
-                />
+            <Tabs defaultValue="pid" className="h-full">
+              <div className="p-4 border-b bg-card/50">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="pid" className="flex items-center gap-2 text-xs">
+                    <Settings className="h-3 w-3" />
+                    PID Control
+                  </TabsTrigger>
+                  <TabsTrigger value="manual" className="flex items-center gap-2 text-xs">
+                    <Activity className="h-3 w-3" />
+                    Manual
+                  </TabsTrigger>
+                </TabsList>
               </div>
-            </ScrollArea>
+
+              <TabsContent value="pid" className="h-[calc(100%-7rem)] m-0">
+                <ScrollArea className="h-full">
+                  <div className="p-4">
+                    <ControlPanel
+                      isRunning={isRunning}
+                      controllerConfig={controllerConfig}
+                      setpoints={setpoints}
+                      droneParams={droneParams}
+                      simulationConfig={simulationConfig}
+                      onStart={handleStart}
+                      onPause={handlePause}
+                      onReset={handleReset}
+                      onControllerConfigChange={handleControllerConfigChange}
+                      onSetpointsChange={handleSetpointsChange}
+                      onDroneParamsChange={handleDroneParamsChange}
+                      onSimulationConfigChange={handleSimulationConfigChange}
+                    />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="manual" className="h-[calc(100%-7rem)] m-0">
+                <ScrollArea className="h-full">
+                  <div className="p-4">
+                    <ManualControlPanel
+                      flightMode={flightMode}
+                      manualInputs={manualInputs}
+                      onFlightModeChange={handleFlightModeChange}
+                      onManualInputsChange={handleManualInputsChange}
+                      onResetInputs={handleResetManualInputs}
+                    />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           </div>
         </ResizablePanel>
 
@@ -295,19 +357,42 @@ export const DroneSimulationInterface: React.FC = () => {
                         </Card>
 
                         {currentData && (
-                          <Card>
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-sm">Motor Outputs</CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-xs font-mono">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>Motor 1: {(currentData.motorInputs.motor1 * 100).toFixed(1)}%</div>
-                                <div>Motor 2: {(currentData.motorInputs.motor2 * 100).toFixed(1)}%</div>
-                                <div>Motor 3: {(currentData.motorInputs.motor3 * 100).toFixed(1)}%</div>
-                                <div>Motor 4: {(currentData.motorInputs.motor4 * 100).toFixed(1)}%</div>
-                              </div>
-                            </CardContent>
-                          </Card>
+                          <>
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm">Flight Status</CardTitle>
+                              </CardHeader>
+                              <CardContent className="text-xs font-mono space-y-2">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>
+                                    <div className="font-semibold text-foreground">Flight Mode</div>
+                                    <div className="capitalize">{currentData.flightMode.replace('_', ' ')}</div>
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold text-foreground">Manual Inputs</div>
+                                    <div>Throttle: {(currentData.manualInputs.throttle * 100).toFixed(0)}%</div>
+                                    <div>Pitch: {(currentData.manualInputs.pitch * 100).toFixed(0)}%</div>
+                                    <div>Roll: {(currentData.manualInputs.roll * 100).toFixed(0)}%</div>
+                                    <div>Yaw: {(currentData.manualInputs.yaw * 100).toFixed(0)}%</div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            <Card>
+                              <CardHeader className="pb-3">
+                                <CardTitle className="text-sm">Motor Outputs</CardTitle>
+                              </CardHeader>
+                              <CardContent className="text-xs font-mono">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div>Motor 1: {(currentData.motorInputs.motor1 * 100).toFixed(1)}%</div>
+                                  <div>Motor 2: {(currentData.motorInputs.motor2 * 100).toFixed(1)}%</div>
+                                  <div>Motor 3: {(currentData.motorInputs.motor3 * 100).toFixed(1)}%</div>
+                                  <div>Motor 4: {(currentData.motorInputs.motor4 * 100).toFixed(1)}%</div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </>
                         )}
                       </div>
                     </ScrollArea>
@@ -334,8 +419,32 @@ export const DroneSimulationInterface: React.FC = () => {
                               <p className="text-muted-foreground">Change target position and yaw angle. Drone will automatically fly to new setpoint.</p>
                             </div>
                             <div>
-                              <h4 className="font-semibold">4. 3D View</h4>
-                              <p className="text-muted-foreground">Click and drag to rotate view, scroll to zoom. Red arrow shows forward direction.</p>
+                              <h4 className="font-semibold">5. Manual Control</h4>
+                              <p className="text-muted-foreground">Switch to Manual tab to control the drone directly with virtual joysticks.</p>
+                            </div>
+                            <div>
+                              <h4 className="font-semibold">6. Flight Modes</h4>
+                              <p className="text-muted-foreground">Manual = direct control, Stabilized = assisted, Altitude Hold = hover, Position Hold = autonomous.</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+
+                        <Card>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-sm">Flight Modes Explained</CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-2 text-xs">
+                            <div>
+                              <strong>Manual:</strong> Direct motor control - challenging but educational
+                            </div>
+                            <div>
+                              <strong>Stabilized:</strong> Manual inputs with automatic attitude stabilization
+                            </div>
+                            <div>
+                              <strong>Altitude Hold:</strong> Maintains altitude while allowing manual attitude control
+                            </div>
+                            <div>
+                              <strong>Position Hold:</strong> Full autonomous flight to GPS coordinates
                             </div>
                           </CardContent>
                         </Card>
