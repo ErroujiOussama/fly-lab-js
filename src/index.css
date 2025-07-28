@@ -2,41 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Academic Drone Simulator Design System - Engineering/Tech Theme */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core Academic Colors */
+    --background: 210 20% 98%;
+    --foreground: 215 25% 15%;
 
+    /* Card & Surface Colors */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 215 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Engineering Blue Primary */
+    --primary: 215 85% 35%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 215 85% 30%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Technical Secondary */
+    --secondary: 210 15% 94%;
+    --secondary-foreground: 215 25% 25%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Subtle Backgrounds */
+    --muted: 210 15% 96%;
+    --muted-foreground: 215 15% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent for Highlights */
+    --accent: 195 85% 45%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Status Colors */
+    --success: 145 85% 35%;
+    --success-foreground: 0 0% 100%;
+    --warning: 45 95% 55%;
+    --warning-foreground: 25 25% 15%;
+    --destructive: 0 85% 55%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders & Inputs */
+    --border: 215 15% 88%;
+    --input: 215 15% 92%;
+    --ring: 215 85% 35%;
 
-    --radius: 0.5rem;
+    /* Simulation-specific Colors */
+    --drone-body: 215 15% 25%;
+    --propeller: 145 25% 45%;
+    --trajectory: 195 85% 55%;
+    --grid: 215 10% 85%;
+
+    /* Chart Colors */
+    --chart-1: 215 85% 45%;
+    --chart-2: 145 85% 45%;
+    --chart-3: 25 85% 55%;
+    --chart-4: 285 85% 55%;
+    --chart-5: 345 85% 55%;
+
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(215 85% 35%), hsl(195 85% 45%));
+    --gradient-accent: linear-gradient(45deg, hsl(195 85% 45%), hsl(145 85% 45%));
+    --gradient-surface: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 15% 98%));
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px hsl(215 25% 15% / 0.08);
+    --shadow-md: 0 4px 12px hsl(215 25% 15% / 0.12);
+    --shadow-lg: 0 10px 25px hsl(215 25% 15% / 0.15);
+    --shadow-simulation: 0 8px 32px hsl(215 85% 35% / 0.2);
+
+    --radius: 0.75rem;
 
     --sidebar-background: 0 0% 98%;
 
