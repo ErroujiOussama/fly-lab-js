@@ -3,11 +3,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DroneSimulator, SimulationData, FlightMode, ManualInputs } from '@/lib/simulation/DroneSimulator';
+import { DroneSimulator, FlightMode, ManualInputs, SimulationData } from '@/features/simulation';
 import { DroneVisualization } from './DroneVisualization';
 import { SimulationCharts } from '../charts/SimulationCharts';
 import { ControlPanel } from '../controls/ControlPanel';
-import { ManualControlPanel } from '../controls/ManualControlPanel';
+import { ManualControlPanel } from '@/features/manual-control';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -141,7 +141,7 @@ export const DroneSimulationInterface: React.FC = () => {
   const droneState = currentData?.state || {
     position: { x: 0, y: 0, z: 0 },
     velocity: { x: 0, y: 0, z: 0 },
-    orientation: { roll: 0, pitch: 0, yaw: 0 },
+    orientation: { x: 0, y: 0, z: 0 }, // roll, pitch, yaw
     angularVelocity: { x: 0, y: 0, z: 0 }
   };
 
@@ -168,7 +168,7 @@ export const DroneSimulationInterface: React.FC = () => {
 
   const setpoints = simulatorRef.current?.getSetpoints() || {
     position: { x: 0, y: 0, z: 2 },
-    attitude: { roll: 0, pitch: 0, yaw: 0 }
+    attitude: { x: 0, y: 0, z: 0 } // roll, pitch, yaw
   };
 
   const droneParams = {
@@ -359,9 +359,9 @@ export const DroneSimulationInterface: React.FC = () => {
                               </div>
                               <div>
                                 <div className="font-semibold text-foreground">Attitude (rad)</div>
-                                <div>Roll: {droneState.orientation.roll.toFixed(3)}</div>
-                                <div>Pitch: {droneState.orientation.pitch.toFixed(3)}</div>
-                                <div>Yaw: {droneState.orientation.yaw.toFixed(3)}</div>
+                                <div>Roll: {droneState.orientation.x.toFixed(3)}</div>
+                                <div>Pitch: {droneState.orientation.y.toFixed(3)}</div>
+                                <div>Yaw: {droneState.orientation.z.toFixed(3)}</div>
                               </div>
                             </div>
                           </CardContent>

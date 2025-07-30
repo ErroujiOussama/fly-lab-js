@@ -4,7 +4,7 @@
 
 import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { DroneState } from '@/lib/physics/DroneModel';
+import { DroneState } from '@/shared/types/simulation';
 
 interface DroneVisualizationProps {
   droneState: DroneState;
@@ -266,7 +266,7 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     droneGroup.position.set(position.x, position.z, position.y); // Note: Y and Z swapped for Three.js
 
     // Update drone orientation (Euler angles)
-    droneGroup.rotation.set(orientation.pitch, orientation.yaw, -orientation.roll);
+    droneGroup.rotation.set(orientation.y, orientation.z, -orientation.x); // pitch, yaw, -roll
 
     // Update trajectory
     if (sceneRef.current.trajectoryIndex < trajectoryPositions.length / 3 - 1) {

@@ -3,19 +3,27 @@
  */
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { FlightMode, ManualInputs } from '@/shared/types/simulation';
 import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle,
+  Label,
+  Slider,
+  Button,
+  Badge,
+  Separator,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider
+} from '@/shared/ui';
 import { 
   Gamepad2, 
   Plane, 
@@ -26,8 +34,6 @@ import {
   ArrowRight,
   Info
 } from 'lucide-react';
-import { FlightMode, ManualInputs } from '@/lib/simulation/DroneSimulator';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 interface ManualControlPanelProps {
   flightMode: FlightMode;

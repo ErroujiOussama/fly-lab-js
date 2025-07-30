@@ -15,7 +15,7 @@ import {
   ChartOptions
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { SimulationData } from '@/lib/simulation/DroneSimulator';
+import { SimulationData } from '@/features/simulation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 ChartJS.register(
@@ -83,7 +83,7 @@ export const SimulationCharts: React.FC<SimulationChartsProps> = ({
         datasets: [
           {
             label: 'Roll (rad)',
-            data: filteredData.map(d => d.state.orientation.roll),
+            data: filteredData.map(d => d.state.orientation.x),
             borderColor: 'hsl(var(--chart-1))',
             backgroundColor: 'hsl(var(--chart-1) / 0.1)',
             tension: 0.4,
@@ -92,7 +92,7 @@ export const SimulationCharts: React.FC<SimulationChartsProps> = ({
           },
           {
             label: 'Pitch (rad)',
-            data: filteredData.map(d => d.state.orientation.pitch),
+            data: filteredData.map(d => d.state.orientation.y),
             borderColor: 'hsl(var(--chart-2))',
             backgroundColor: 'hsl(var(--chart-2) / 0.1)',
             tension: 0.4,
@@ -101,7 +101,7 @@ export const SimulationCharts: React.FC<SimulationChartsProps> = ({
           },
           {
             label: 'Yaw (rad)',
-            data: filteredData.map(d => d.state.orientation.yaw),
+            data: filteredData.map(d => d.state.orientation.z),
             borderColor: 'hsl(var(--chart-3))',
             backgroundColor: 'hsl(var(--chart-3) / 0.1)',
             tension: 0.4,

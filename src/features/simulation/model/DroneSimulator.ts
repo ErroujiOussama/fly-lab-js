@@ -3,80 +3,18 @@
  * Orchestrates physics, control, and data logging
  */
 
-import { DroneModel, DroneState, MotorInputs } from '../physics/DroneModel';
-import { PIDController, CascadedPIDController } from '../control/PIDController';
-
-export interface SimulationConfig {
-  timestep: number; // simulation timestep in seconds
-  realTimeMultiplier: number; // 1.0 = real-time, 2.0 = 2x speed
-  enablePhysics: boolean;
-  enableControl: boolean;
-}
-
-export type FlightMode = 'manual' | 'stabilized' | 'altitude_hold' | 'position_hold';
-
-export interface ManualInputs {
-  pitch: number;    // [-1, 1] - forward/backward stick
-  roll: number;     // [-1, 1] - left/right stick  
-  yaw: number;      // [-1, 1] - rotation stick
-  throttle: number; // [0, 1] - throttle stick
-}
-
-export interface ControllerConfig {
-  altitude: {
-    kp: number;
-    ki: number;
-    kd: number;
-    enabled: boolean;
-  };
-  attitude: {
-    roll: { kp: number; ki: number; kd: number; enabled: boolean };
-    pitch: { kp: number; ki: number; kd: number; enabled: boolean };
-    yaw: { kp: number; ki: number; kd: number; enabled: boolean };
-  };
-  position: {
-    x: {
-      outer: { kp: number; ki: number; kd: number };
-      inner: { kp: number; ki: number; kd: number };
-      enabled: boolean;
-    };
-    y: {
-      outer: { kp: number; ki: number; kd: number };
-      inner: { kp: number; ki: number; kd: number };
-      enabled: boolean;
-    };
-  };
-}
-
-export interface SetPoints {
-  position: { x: number; y: number; z: number };
-  attitude: { roll: number; pitch: number; yaw: number };
-}
-
-export interface SimulationData {
-  time: number;
-  state: DroneState;
-  motorInputs: MotorInputs;
-  controlOutputs: {
-    altitude: number;
-    roll: number;
-    pitch: number;
-    yaw: number;
-    positionX: number;
-    positionY: number;
-  };
-  errors: {
-    altitude: number;
-    roll: number;
-    pitch: number;
-    yaw: number;
-    positionX: number;
-    positionY: number;
-  };
-  setpoints: SetPoints;
-  flightMode: FlightMode;
-  manualInputs: ManualInputs;
-}
+import { DroneModel } from '@/entities/drone';
+import { PIDController, CascadedPIDController } from '@/features/pid-control';
+import { 
+  DroneState, 
+  MotorInputs, 
+  FlightMode, 
+  ManualInputs, 
+  ControllerConfig, 
+  SetPoints, 
+  SimulationConfig,
+  SimulationData
+} from '@/shared/types/simulation';
 
 export class DroneSimulator {
   private drone: DroneModel;
@@ -149,7 +87,7 @@ export class DroneSimulator {
 
     this.setpoints = {
       position: { x: 0, y: 0, z: 2 }, // Hover at 2m height
-      attitude: { roll: 0, pitch: 0, yaw: 0 }
+      attitude: { x: 0, y: 0, z: 0 } // roll, pitch, yaw
     };
 
     this.initializeControllers();
@@ -158,10 +96,10 @@ export class DroneSimulator {
   private initializeControllers(): void {
     const { altitude, attitude, position } = this.controllerConfig;
     
-    this.altitudeController = new PIDController(altitude, 10, 1, 0);
-    this.rollController = new PIDController(attitude.roll, 5, 0.5, -0.5);
-    this.pitchController = new PIDController(attitude.pitch, 5, 0.5, -0.5);
-    this.yawController = new PIDController(attitude.yaw, 5, 0.3, -0.3);
+    this.altitudeController = new PIDController(altitude, 10, 0);
+    this.rollController = new PIDController(attitude.roll, 0.5, -0.5);
+    this.pitchController = new PIDController(attitude.pitch, 0.5, -0.5);
+    this.yawController = new PIDController(attitude.yaw, 0.3, -0.3);
     
     this.positionXController = new CascadedPIDController(
       position.x.outer,
@@ -243,19 +181,19 @@ export class DroneSimulator {
     // Attitude control
     const rollOutput = this.rollController.update(
       rollDesired,
-      orientation.roll,
+      orientation.x, // roll
       dt
     );
 
     const pitchOutput = this.pitchController.update(
       pitchDesired,
-      orientation.pitch,
+      orientation.y, // pitch
       dt
     );
 
     const yawOutput = this.yawController.update(
-      this.setpoints.attitude.yaw,
-      orientation.yaw,
+      this.setpoints.attitude.z, // yaw
+      orientation.z, // yaw
       dt
     );
 

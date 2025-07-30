@@ -20,22 +20,22 @@ import {
   Target,
   Plane
 } from 'lucide-react';
-import { ControllerConfig, SetPoints, SimulationConfig } from '@/lib/simulation/DroneSimulator';
-import { DroneParameters } from '@/lib/physics/DroneModel';
+import { SimulationConfig, ControllerConfig, SetPoints } from '@/features/simulation';
+import { DroneParams } from '@/shared/types/simulation';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 interface ControlPanelProps {
   isRunning: boolean;
   controllerConfig: ControllerConfig;
   setpoints: SetPoints;
-  droneParams: DroneParameters;
+  droneParams: DroneParams;
   simulationConfig: SimulationConfig;
   onStart: () => void;
   onPause: () => void;
   onReset: () => void;
   onControllerConfigChange: (config: Partial<ControllerConfig>) => void;
   onSetpointsChange: (setpoints: Partial<SetPoints>) => void;
-  onDroneParamsChange: (params: Partial<DroneParameters>) => void;
+  onDroneParamsChange: (params: Partial<DroneParams>) => void;
   onSimulationConfigChange: (config: Partial<SimulationConfig>) => void;
 }
 
@@ -250,9 +250,9 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           <div className="space-y-2">
             <Label className="text-xs">Yaw Angle (rad)</Label>
             <Slider
-              value={[setpoints.attitude.yaw]}
+              value={[setpoints.attitude.z]}
               onValueChange={([value]) => onSetpointsChange({
-                attitude: { ...setpoints.attitude, yaw: value }
+                attitude: { ...setpoints.attitude, z: value }
               })}
               min={-Math.PI}
               max={Math.PI}
@@ -260,7 +260,7 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
               className="w-full"
             />
             <div className="text-xs text-muted-foreground">
-              {setpoints.attitude.yaw.toFixed(2)} rad ({(setpoints.attitude.yaw * 180 / Math.PI).toFixed(0)}°)
+              {setpoints.attitude.z.toFixed(2)} rad ({(setpoints.attitude.z * 180 / Math.PI).toFixed(0)}°)
             </div>
           </div>
         </CardContent>
