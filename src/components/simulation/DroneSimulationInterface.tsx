@@ -27,6 +27,13 @@ export const DroneSimulationInterface: React.FC = () => {
   const [currentData, setCurrentData] = useState<SimulationData | null>(null);
   const [dataHistory, setDataHistory] = useState<SimulationData[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [flightMode, setFlightMode] = useState<FlightMode>('position_hold');
+  const [manualInputs, setManualInputs] = useState<ManualInputs>({
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    throttle: 0.5
+  });
 
   // Initialize simulator
   useEffect(() => {
@@ -40,6 +47,13 @@ export const DroneSimulationInterface: React.FC = () => {
     simulatorRef.current.setResetCallback(() => {
       setCurrentData(null);
       setDataHistory([]);
+      setFlightMode('position_hold');
+      setManualInputs({
+        pitch: 0,
+        roll: 0,
+        yaw: 0,
+        throttle: 0.5
+      });
     });
 
     return () => {
@@ -98,23 +112,28 @@ export const DroneSimulationInterface: React.FC = () => {
   const handleFlightModeChange = (mode: FlightMode) => {
     if (simulatorRef.current) {
       simulatorRef.current.setFlightMode(mode);
+      setFlightMode(mode);
     }
   };
 
   const handleManualInputsChange = (inputs: Partial<ManualInputs>) => {
     if (simulatorRef.current) {
-      simulatorRef.current.setManualInputs(inputs);
+      const newInputs = { ...manualInputs, ...inputs };
+      simulatorRef.current.setManualInputs(newInputs);
+      setManualInputs(newInputs);
     }
   };
 
   const handleResetManualInputs = () => {
+    const resetInputs = {
+      pitch: 0,
+      roll: 0,
+      yaw: 0,
+      throttle: 0.5
+    };
     if (simulatorRef.current) {
-      simulatorRef.current.setManualInputs({
-        pitch: 0,
-        roll: 0,
-        yaw: 0,
-        throttle: 0.5
-      });
+      simulatorRef.current.setManualInputs(resetInputs);
+      setManualInputs(resetInputs);
     }
   };
 
@@ -161,14 +180,6 @@ export const DroneSimulationInterface: React.FC = () => {
     thrustToTorqueRatio: 0.016
   };
 
-  
-  const flightMode = simulatorRef.current?.getFlightMode() || 'position_hold';
-  const manualInputs = simulatorRef.current?.getManualInputs() || {
-    pitch: 0,
-    roll: 0,
-    yaw: 0,
-    throttle: 0.5
-  };
 
   const simulationConfig = {
     timestep: 0.01,
