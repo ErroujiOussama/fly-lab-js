@@ -4,15 +4,21 @@
 
 import React, { useRef, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
-import { DroneState } from '@/shared/types/simulation';
+import { DroneState, Waypoint, Vector3D } from '@/shared/types/simulation';
 
 interface DroneVisualizationProps {
   droneState: DroneState;
+  waypoints: Waypoint[];
+  currentWaypointIndex: number;
+  onAddWaypoint: (position: Vector3D) => void;
   className?: string;
 }
 
 export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
   droneState,
+  waypoints,
+  currentWaypointIndex,
+  onAddWaypoint,
   className = ''
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -25,7 +31,8 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     trajectory: THREE.Points;
     trajectoryPositions: Float32Array;
     trajectoryIndex: number;
-    gridHelper: THREE.GridHelper;
+    gridHelper: THREE.Plane;
+    waypointGroup: THREE.Group;
     frameId?: number;
   }>();
 
@@ -72,9 +79,21 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     scene.add(directionalLight);
 
     // Grid
-    const gridHelper = new THREE.GridHelper(20, 20, 0x1e40af, 0x94a3b8);
-    gridHelper.position.y = -0.1;
+    // Grid (using a plane for raycasting)
+    const gridGeometry = new THREE.PlaneGeometry(20, 20);
+    const gridMaterial = new THREE.MeshLambertMaterial({
+      color: 0x94a3b8,
+      transparent: true,
+      opacity: 0.2,
+      side: THREE.DoubleSide
+    });
+    const gridHelper = new THREE.Mesh(gridGeometry, gridMaterial);
+    gridHelper.rotation.x = -Math.PI / 2;
+    gridHelper.receiveShadow = true;
     scene.add(gridHelper);
+
+    const gridLines = new THREE.GridHelper(20, 20, 0x1e40af, 0x94a3b8);
+    scene.add(gridLines);
 
     // Create drone
     const droneGroup = new THREE.Group();
@@ -143,6 +162,10 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     const trajectory = new THREE.Points(trajectoryGeometry, trajectoryMaterial);
     scene.add(trajectory);
 
+    // Waypoint visualization group
+    const waypointGroup = new THREE.Group();
+    scene.add(waypointGroup);
+
     // Store references
     sceneRef.current = {
       scene,
@@ -153,7 +176,8 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
       trajectory,
       trajectoryPositions,
       trajectoryIndex: 0,
-      gridHelper
+      gridHelper,
+      waypointGroup
     };
 
     // Mouse controls
@@ -174,15 +198,19 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     };
 
     const handleMouseDown = (event: MouseEvent) => {
-      isDragging = true;
+      isDragging = false; // Will be set to true on mousemove
       previousMousePosition = { x: event.clientX, y: event.clientY };
     };
 
     const handleMouseMove = (event: MouseEvent) => {
-      if (!isDragging) return;
-      
       const deltaX = event.clientX - previousMousePosition.x;
       const deltaY = event.clientY - previousMousePosition.y;
+
+      if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) {
+        isDragging = true;
+      }
+
+      if (!isDragging) return;
       
       cameraAngleY += deltaX * 0.01;
       cameraAngleX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, cameraAngleX - deltaY * 0.01));
@@ -192,7 +220,26 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
       previousMousePosition = { x: event.clientX, y: event.clientY };
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (event: MouseEvent) => {
+      if (!isDragging && sceneRef.current) {
+        // This is a click, not a drag
+        const { camera, renderer, gridHelper } = sceneRef.current;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(
+          ((event.clientX - rect.left) / rect.width) * 2 - 1,
+          -((event.clientY - rect.top) / rect.height) * 2 + 1
+        );
+
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, camera);
+
+        const intersects = raycaster.intersectObject(gridHelper);
+
+        if (intersects.length > 0) {
+          const point = intersects[0].point;
+          onAddWaypoint({ x: point.x, y: point.z, z: 2 }); // Default new waypoints to 2m altitude
+        }
+      }
       isDragging = false;
     };
 
@@ -283,6 +330,55 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     }
   }, [droneState]);
 
+  // Update waypoints visualization
+  useEffect(() => {
+    if (!sceneRef.current) return;
+    const { waypointGroup } = sceneRef.current;
+
+    // Clear previous waypoints
+    while (waypointGroup.children.length > 0) {
+      waypointGroup.remove(waypointGroup.children[0]);
+    }
+
+    if (waypoints.length === 0) return;
+
+    // Materials
+    const pendingMaterial = new THREE.MeshLambertMaterial({ color: 0x64748b });
+    const currentMaterial = new THREE.MeshLambertMaterial({ color: 0x2563eb });
+    const completedMaterial = new THREE.MeshLambertMaterial({ color: 0x16a34a });
+    const lineMaterial = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.7 });
+
+    const waypointGeometry = new THREE.CylinderGeometry(0.1, 0.1, 0.05, 16);
+    const points: THREE.Vector3[] = [];
+
+    waypoints.forEach((wp, index) => {
+      let material = pendingMaterial;
+      if (index < currentWaypointIndex) {
+        material = completedMaterial;
+      } else if (index === currentWaypointIndex) {
+        material = currentMaterial;
+      }
+
+      const waypointMesh = new THREE.Mesh(waypointGeometry, material);
+      waypointMesh.position.set(wp.x, wp.z, wp.y); // Y and Z swapped
+      waypointGroup.add(waypointMesh);
+
+      const textSprite = createTextSprite(`${index + 1}`, { fontsize: 24, fontface: 'Arial', textColor: { r: 255, g: 255, b: 255, a: 1.0 }});
+      textSprite.position.set(wp.x, wp.z + 0.3, wp.y);
+      waypointGroup.add(textSprite);
+
+      points.push(new THREE.Vector3(wp.x, wp.z, wp.y));
+    });
+
+    // Line path
+    if (points.length > 1) {
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      waypointGroup.add(line);
+    }
+
+  }, [waypoints, currentWaypointIndex]);
+
   return (
     <div 
       ref={mountRef} 
@@ -291,3 +387,37 @@ export const DroneVisualization: React.FC<DroneVisualizationProps> = ({
     />
   );
 };
+
+// Helper to create text sprites
+function createTextSprite(message: string, parameters: any) {
+  parameters = parameters || {};
+  const fontface = parameters.fontface || 'Arial';
+  const fontsize = parameters.fontsize || 18;
+  const borderThickness = parameters.borderThickness || 4;
+  const borderColor = parameters.borderColor || { r: 0, g: 0, b: 0, a: 1.0 };
+  const backgroundColor = parameters.backgroundColor || { r: 255, g: 255, b: 255, a: 1.0 };
+  const textColor = parameters.textColor || { r: 0, g: 0, b: 0, a: 1.0 };
+
+  const canvas = document.createElement('canvas');
+  const context = canvas.getContext('2d');
+  if (!context) return new THREE.Sprite();
+
+  context.font = `Bold ${fontsize}px ${fontface}`;
+  const metrics = context.measureText(message);
+  const textWidth = metrics.width;
+
+  context.fillStyle = `rgba(${backgroundColor.r}, ${backgroundColor.g}, ${backgroundColor.b}, ${backgroundColor.a})`;
+  context.strokeStyle = `rgba(${borderColor.r}, ${borderColor.g}, ${borderColor.b}, ${borderColor.a})`;
+  context.lineWidth = borderThickness;
+
+  context.fillStyle = `rgba(${textColor.r}, ${textColor.g}, ${textColor.b}, 1.0)`;
+  context.fillText(message, borderThickness, fontsize + borderThickness);
+
+  const texture = new THREE.Texture(canvas);
+  texture.needsUpdate = true;
+
+  const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+  const sprite = new THREE.Sprite(spriteMaterial);
+  sprite.scale.set(0.5, 0.25, 1.0);
+  return sprite;
+}

@@ -32,7 +32,8 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Info
+  Info,
+  MapIcon
 } from 'lucide-react';
 
 interface ManualControlPanelProps {
@@ -66,6 +67,8 @@ const getFlightModeDescription = (mode: FlightMode): string => {
       return 'Altitude hold + manual attitude';
     case 'position_hold':
       return 'Full autonomous position hold';
+    case 'waypoint':
+      return 'Autonomous navigation through a series of waypoints';
   }
 };
 
@@ -78,6 +81,8 @@ const getFlightModeColor = (mode: FlightMode): "destructive" | "secondary" | "de
     case 'altitude_hold':
       return 'secondary';
     case 'position_hold':
+      return 'default';
+    case 'waypoint':
       return 'default';
   }
 };
@@ -92,6 +97,7 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
   const isManualMode = flightMode === 'manual';
   const isStabilizedMode = flightMode === 'stabilized';
   const isAltitudeHoldMode = flightMode === 'altitude_hold';
+  const isAutonomousMode = flightMode === 'position_hold' || flightMode === 'waypoint';
 
   return (
     <div className="space-y-4">
@@ -133,6 +139,12 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
                   <div className="flex items-center gap-2">
                     <Plane className="h-4 w-4" />
                     Position Hold
+                  </div>
+                </SelectItem>
+                <SelectItem value="waypoint" className="hover:bg-muted cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <MapIcon className="h-4 w-4" />
+                    Waypoint
                   </div>
                 </SelectItem>
               </SelectContent>
@@ -186,7 +198,7 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
               max={1}
               step={0.01}
               className="w-full"
-              disabled={flightMode === 'position_hold'}
+              disabled={isAutonomousMode}
             />
             <div className="text-xs text-muted-foreground flex justify-between">
               <span>Descent</span>
@@ -214,7 +226,7 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
               max={1}
               step={0.01}
               className="w-full"
-              disabled={flightMode === 'position_hold'}
+              disabled={isAutonomousMode}
             />
             <div className="text-xs text-muted-foreground flex justify-between">
               <span>Backward</span>
@@ -240,7 +252,7 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
               max={1}
               step={0.01}
               className="w-full"
-              disabled={flightMode === 'position_hold'}
+              disabled={isAutonomousMode}
             />
             <div className="text-xs text-muted-foreground flex justify-between">
               <span>Left</span>
@@ -297,10 +309,10 @@ export const ManualControlPanel: React.FC<ManualControlPanelProps> = ({
                   <span>Altitude locked, manual attitude control</span>
                 </div>
               )}
-              {flightMode === 'position_hold' && (
+              {isAutonomousMode && (
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-primary"></div>
-                  <span>Full autonomous flight to setpoints</span>
+                  <span>Full autonomous flight to {flightMode === 'waypoint' ? 'waypoints' : 'setpoints'}</span>
                 </div>
               )}
             </div>

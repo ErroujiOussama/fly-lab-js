@@ -19,11 +19,36 @@ import {
   Settings,
   Monitor,
   BookOpen,
-  Zap
+  Zap,
+  Map as MapIcon,
+  Plus,
+  Trash2,
+  Play,
+  Pause,
+  RotateCcw,
+  Code,
+  ListTree
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { nanoid } from 'nanoid';
+import { Waypoint } from '@/shared/types/simulation';
+import { CodeEditor } from '@/features/scripting/ui/CodeEditor';
+import DroneScriptWorker from '@/features/scripting/worker/drone-script.worker?worker';
+import { getScenarios, getScenarioById, FlightScenario } from '@/features/scenarios/model/scenarios';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export const DroneSimulationInterface: React.FC = () => {
   const simulatorRef = useRef<DroneSimulator>();
+  const scriptWorkerRef = useRef<Worker | null>(null);
   const [currentData, setCurrentData] = useState<SimulationData | null>(null);
   const [dataHistory, setDataHistory] = useState<SimulationData[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -34,32 +59,34 @@ export const DroneSimulationInterface: React.FC = () => {
     yaw: 0,
     throttle: 0.5
   });
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
+  const [newWaypoint, setNewWaypoint] = useState<Omit<Waypoint, 'id'>>({ x: 0, y: 0, z: 2 });
+  const [isScriptRunning, setIsScriptRunning] = useState(false);
+  const [editorScript, setEditorScript] = useState('');
 
   // Initialize simulator
   useEffect(() => {
     simulatorRef.current = new DroneSimulator();
     
-    simulatorRef.current.setUpdateCallback((data: SimulationData) => {
+    const sim = simulatorRef.current;
+
+    sim.setUpdateCallback((data: SimulationData) => {
       setCurrentData(data);
       setDataHistory(prev => [...prev.slice(-1000), data]); // Keep last 1000 points
     });
 
-    simulatorRef.current.setResetCallback(() => {
+    sim.setResetCallback(() => {
       setCurrentData(null);
       setDataHistory([]);
       setFlightMode('position_hold');
-      setManualInputs({
-        pitch: 0,
-        roll: 0,
-        yaw: 0,
-        throttle: 0.5
-      });
+      setManualInputs({ pitch: 0, roll: 0, yaw: 0, throttle: 0.5 });
+      setWaypoints([]);
+      handleStopScript();
     });
 
     return () => {
-      if (simulatorRef.current) {
-        simulatorRef.current.pause();
-      }
+      sim.pause();
+      handleStopScript();
     };
   }, []);
 
@@ -114,6 +141,119 @@ export const DroneSimulationInterface: React.FC = () => {
       simulatorRef.current.setFlightMode(mode);
       setFlightMode(mode);
     }
+  };
+
+  const handleAddWaypoint = () => {
+    const waypoint: Waypoint = { ...newWaypoint, id: nanoid() };
+    if (simulatorRef.current) {
+      simulatorRef.current.addWaypoint(waypoint);
+      setWaypoints([...simulatorRef.current.getWaypoints()]);
+    }
+  };
+
+  const handleRemoveWaypoint = (id: string) => {
+    if (simulatorRef.current) {
+      simulatorRef.current.removeWaypoint(id);
+      setWaypoints([...simulatorRef.current.getWaypoints()]);
+    }
+  };
+
+  const handleClearWaypoints = () => {
+    if (simulatorRef.current) {
+      simulatorRef.current.clearWaypoints();
+      setWaypoints([]);
+    }
+  };
+
+  const handleLoadScenario = (scenarioId: string) => {
+    const scenario = getScenarioById(scenarioId);
+    const sim = simulatorRef.current;
+    if (!scenario || !sim) return;
+
+    handleReset();
+
+    const newWaypoints = scenario.waypoints.map(wp => ({...wp, id: nanoid()}));
+    setWaypoints(newWaypoints);
+    sim.setWaypoints(newWaypoints);
+
+    setFlightMode(scenario.flightMode);
+    sim.setFlightMode(scenario.flightMode);
+
+    if (scenario.script) {
+      setEditorScript(scenario.script);
+    } else {
+      setEditorScript('');
+    }
+  };
+
+  const handleRunScript = (code: string) => {
+    if (isScriptRunning) return;
+
+    const worker = new DroneScriptWorker();
+    scriptWorkerRef.current = worker;
+    setIsScriptRunning(true);
+
+    worker.onmessage = (event: MessageEvent) => {
+      const { type, payload, id } = event.data;
+      const sim = simulatorRef.current;
+      if (!sim) return;
+
+      switch (type) {
+        case 'moveTo':
+          sim.setFlightMode('waypoint');
+          sim.setWaypoints([{ ...payload, id: 'scripted' }]);
+          // Simple completion check - could be improved with events
+          const checkCompletion = setInterval(() => {
+            if (sim.getFlightMode() !== 'waypoint') {
+              clearInterval(checkCompletion);
+              worker.postMessage({ type: 'commandResponse', id, payload: {} });
+            }
+          }, 100);
+          break;
+
+        case 'takeoff':
+          sim.setFlightMode('position_hold');
+          sim.setSetpoints({ position: { x: sim.getDroneState().position.x, y: sim.getDroneState().position.y, z: payload.altitude } });
+          const checkTakeoff = setInterval(() => {
+            if (Math.abs(sim.getDroneState().position.z - payload.altitude) < 0.1) {
+              clearInterval(checkTakeoff);
+              worker.postMessage({ type: 'commandResponse', id, payload: {} });
+            }
+          }, 100);
+          break;
+
+        case 'land':
+          sim.setFlightMode('position_hold');
+          sim.setSetpoints({ position: { x: sim.getDroneState().position.x, y: sim.getDroneState().position.y, z: 0.1 } });
+           const checkLand = setInterval(() => {
+            if (Math.abs(sim.getDroneState().position.z - 0.1) < 0.05) {
+              clearInterval(checkLand);
+              worker.postMessage({ type: 'commandResponse', id, payload: {} });
+            }
+          }, 100);
+          break;
+
+        case 'getTelemetry':
+          worker.postMessage({ type: 'commandResponse', id, payload: sim.getDroneState() });
+          break;
+
+        case 'scriptFinished':
+        case 'scriptError':
+          console.log(type === 'scriptError' ? `Script Error: ${event.data.error}` : 'Script Finished');
+          handleStopScript();
+          break;
+      }
+    };
+
+    worker.postMessage({ type: 'executeScript', payload: { code } });
+  };
+
+  const handleStopScript = () => {
+    if (scriptWorkerRef.current) {
+      scriptWorkerRef.current.terminate();
+      scriptWorkerRef.current = null;
+    }
+    setIsScriptRunning(false);
   };
 
   const handleManualInputsChange = (inputs: Partial<ManualInputs>) => {
@@ -198,9 +338,23 @@ export const DroneSimulationInterface: React.FC = () => {
               <Zap className="h-6 w-6 text-primary" />
               <h1 className="text-xl font-bold">Quadrotor Flight Simulator</h1>
             </div>
-            <Badge variant="secondary" className="text-xs">
-              Educational Platform
-            </Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="flex items-center gap-2">
+                  <ListTree className="h-4 w-4" />
+                  Scenarios
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Load a Scenario</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {getScenarios().map(scenario => (
+                  <DropdownMenuItem key={scenario.id} onClick={() => handleLoadScenario(scenario.id)}>
+                    {scenario.name}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           
           <div className="flex items-center gap-4">
@@ -231,14 +385,22 @@ export const DroneSimulationInterface: React.FC = () => {
       {/* Main Content */}
       <ResizablePanelGroup direction="horizontal" className="h-[calc(100vh-4rem)]">
         {/* Control Panel */}
-        <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
+        <ResizablePanel defaultSize={30} minSize={25} maxSize={40}>
           <div className="h-full border-r bg-card/30">
             <Tabs defaultValue="pid" className="h-full">
               <div className="p-4 border-b bg-card/50">
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-4">
                   <TabsTrigger value="pid" className="flex items-center gap-2 text-xs">
                     <Settings className="h-3 w-3" />
-                    PID Control
+                    PID
+                  </TabsTrigger>
+                  <TabsTrigger value="waypoints" className="flex items-center gap-2 text-xs">
+                    <MapIcon className="h-3 w-3" />
+                    Waypoints
+                  </TabsTrigger>
+                  <TabsTrigger value="scripting" className="flex items-center gap-2 text-xs">
+                    <Code className="h-3 w-3" />
+                    Script
                   </TabsTrigger>
                   <TabsTrigger value="manual" className="flex items-center gap-2 text-xs">
                     <Activity className="h-3 w-3" />
@@ -268,6 +430,74 @@ export const DroneSimulationInterface: React.FC = () => {
                 </ScrollArea>
               </TabsContent>
 
+              <TabsContent value="waypoints" className="h-[calc(100%-7rem)] m-0">
+                <ScrollArea className="h-full">
+                  <div className="p-4 space-y-4">
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Add Waypoint</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <Label htmlFor="wp-x" className="text-xs">X (m)</Label>
+                            <Input id="wp-x" type="number" value={newWaypoint.x} onChange={e => setNewWaypoint({...newWaypoint, x: parseFloat(e.target.value)})} />
+                          </div>
+                          <div>
+                            <Label htmlFor="wp-y" className="text-xs">Y (m)</Label>
+                            <Input id="wp-y" type="number" value={newWaypoint.y} onChange={e => setNewWaypoint({...newWaypoint, y: parseFloat(e.target.value)})} />
+                          </div>
+                          <div>
+                            <Label htmlFor="wp-z" className="text-xs">Z (m)</Label>
+                            <Input id="wp-z" type="number" value={newWaypoint.z} onChange={e => setNewWaypoint({...newWaypoint, z: parseFloat(e.target.value)})} />
+                          </div>
+                        </div>
+                        <Button onClick={handleAddWaypoint} size="sm" className="w-full">
+                          <Plus className="h-4 w-4 mr-2" /> Add Waypoint
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Waypoint List</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {waypoints.length > 0 ? (
+                          <div className="space-y-2">
+                            {waypoints.map((wp, index) => (
+                              <div key={wp.id} className="flex items-center justify-between p-2 bg-muted rounded-md">
+                                <div className="text-xs font-mono">
+                                  {index + 1}: ({wp.x.toFixed(1)}, {wp.y.toFixed(1)}, {wp.z.toFixed(1)})
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleRemoveWaypoint(wp.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            <Button onClick={handleClearWaypoints} size="sm" variant="outline" className="w-full">
+                              Clear All
+                            </Button>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground text-center py-4">No waypoints defined.</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="scripting" className="h-[calc(100%-7rem)] m-0">
+                <div className="p-4 h-full">
+                  <CodeEditor
+                    onRunScript={handleRunScript}
+                    onStopScript={handleStopScript}
+                    isRunning={isScriptRunning}
+                    initialCode={editorScript}
+                  />
+                </div>
+              </TabsContent>
+
               <TabsContent value="manual" className="h-[calc(100%-7rem)] m-0">
                 <ScrollArea className="h-full">
                   <div className="p-4">
@@ -288,7 +518,7 @@ export const DroneSimulationInterface: React.FC = () => {
         <ResizableHandle withHandle />
 
         {/* Main Visualization Area */}
-        <ResizablePanel defaultSize={75} minSize={50}>
+        <ResizablePanel defaultSize={70} minSize={50}>
           <ResizablePanelGroup direction="vertical">
             {/* 3D Visualization */}
             <ResizablePanel defaultSize={60} minSize={40}>
@@ -300,7 +530,19 @@ export const DroneSimulationInterface: React.FC = () => {
                   </h2>
                 </div>
                 <div className="h-[calc(100%-4rem)] p-4">
-                  <DroneVisualization droneState={droneState} className="h-full" />
+                  <DroneVisualization
+                    droneState={droneState}
+                    waypoints={waypoints}
+                    currentWaypointIndex={simulatorRef.current?.getCurrentWaypointIndex() ?? -1}
+                    onAddWaypoint={(pos) => {
+                      const waypoint: Waypoint = { ...pos, id: nanoid() };
+                      if (simulatorRef.current) {
+                        simulatorRef.current.addWaypoint(waypoint);
+                        setWaypoints([...simulatorRef.current.getWaypoints()]);
+                      }
+                    }}
+                    className="h-full"
+                  />
                 </div>
               </div>
             </ResizablePanel>

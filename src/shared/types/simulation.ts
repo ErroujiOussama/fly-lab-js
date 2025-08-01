@@ -22,7 +22,17 @@ export interface MotorInputs {
   motor4: number;
 }
 
-export type FlightMode = 'manual' | 'stabilized' | 'altitude_hold' | 'position_hold';
+export type FlightMode =
+  | 'manual'
+  | 'stabilized'
+  | 'altitude_hold'
+  | 'position_hold'
+  | 'waypoint';
+
+export interface Waypoint extends Vector3D {
+  id: string;
+  name?: string;
+}
 
 export interface ManualInputs {
   pitch: number;    // [-1, 1]

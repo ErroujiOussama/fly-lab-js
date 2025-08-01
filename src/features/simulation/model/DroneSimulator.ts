@@ -13,8 +13,11 @@ import {
   ControllerConfig, 
   SetPoints, 
   SimulationConfig,
-  SimulationData
+  SimulationData,
+  Waypoint
 } from '@/shared/types/simulation';
+
+const WAYPOINT_REACHED_THRESHOLD = 0.2; // in meters
 
 export class DroneSimulator {
   private drone: DroneModel;
@@ -32,6 +35,11 @@ export class DroneSimulator {
   private setpoints: SetPoints;
   private flightMode: FlightMode;
   private manualInputs: ManualInputs;
+
+  // Waypoint navigation
+  private waypoints: Waypoint[] = [];
+  private currentWaypointIndex: number = -1;
+
   private currentTime: number;
   private isRunning: boolean;
   private animationId: number | null = null;
@@ -156,23 +164,30 @@ export class DroneSimulator {
   private calculateControlOutputs(state: DroneState, dt: number) {
     const { position, orientation, velocity } = state;
     
+    let targetPosition = { ...this.setpoints.position };
+
+    // Waypoint navigation logic
+    if (this.flightMode === 'waypoint' && this.currentWaypointIndex !== -1 && this.waypoints[this.currentWaypointIndex]) {
+      targetPosition = this.waypoints[this.currentWaypointIndex];
+    }
+
     // Altitude control (Z-axis)
     const altitudeOutput = this.altitudeController.update(
-      this.setpoints.position.z,
+      targetPosition.z,
       position.z,
       dt
     );
 
     // Position control (X, Y axes) -> desired attitude angles
     const pitchDesired = this.positionXController.update(
-      this.setpoints.position.x,
+      targetPosition.x,
       position.x,
       velocity.x,
       dt
     );
 
     const rollDesired = -this.positionYController.update(
-      this.setpoints.position.y,
+      targetPosition.y,
       position.y,
       velocity.y,
       dt
@@ -242,6 +257,7 @@ export class DroneSimulator {
         break;
         
       case 'position_hold':
+      case 'waypoint':
       default:
         // Full autonomous mode
         baseThrust = 0.65 + altitude;
@@ -268,6 +284,26 @@ export class DroneSimulator {
   private step(): void {
     const state = this.drone.getState();
     const dt = this.config.timestep;
+
+    // Waypoint completion check
+    if (this.flightMode === 'waypoint' && this.currentWaypointIndex !== -1 && this.waypoints[this.currentWaypointIndex]) {
+      const currentWaypoint = this.waypoints[this.currentWaypointIndex];
+      const distance = Math.sqrt(
+        Math.pow(state.position.x - currentWaypoint.x, 2) +
+        Math.pow(state.position.y - currentWaypoint.y, 2) +
+        Math.pow(state.position.z - currentWaypoint.z, 2)
+      );
+
+      if (distance < WAYPOINT_REACHED_THRESHOLD) {
+        if (this.currentWaypointIndex < this.waypoints.length - 1) {
+          this.currentWaypointIndex++;
+        } else {
+          // Last waypoint reached
+          this.flightMode = 'position_hold';
+          this.currentWaypointIndex = -1; // Mark as complete
+        }
+      }
+    }
 
     let motorInputs: MotorInputs;
     let controlOutputs: any;
@@ -365,6 +401,8 @@ export class DroneSimulator {
     this.dataHistory = [];
     
     // Reset controllers
+    this.waypoints = [];
+    this.currentWaypointIndex = -1;
     this.altitudeController.reset();
     this.rollController.reset();
     this.pitchController.reset();
@@ -410,6 +448,9 @@ export class DroneSimulator {
   }
 
   setFlightMode(mode: FlightMode): void {
+    if (mode === 'waypoint' && this.waypoints.length > 0) {
+      this.currentWaypointIndex = 0;
+    }
     this.flightMode = mode;
   }
 
@@ -423,5 +464,41 @@ export class DroneSimulator {
 
   getManualInputs(): ManualInputs {
     return { ...this.manualInputs };
+  }
+
+  // --- Waypoint Methods ---
+
+  setWaypoints(waypoints: Waypoint[]): void {
+    this.waypoints = [...waypoints];
+    if (this.flightMode === 'waypoint') {
+      this.currentWaypointIndex = this.waypoints.length > 0 ? 0 : -1;
+    }
+  }
+
+  addWaypoint(waypoint: Waypoint): void {
+    this.waypoints.push(waypoint);
+    if (this.flightMode === 'waypoint' && this.currentWaypointIndex === -1) {
+      this.currentWaypointIndex = this.waypoints.length - 1;
+    }
+  }
+
+  removeWaypoint(waypointId: string): void {
+    this.waypoints = this.waypoints.filter(wp => wp.id !== waypointId);
+  }
+
+  clearWaypoints(): void {
+    this.waypoints = [];
+    this.currentWaypointIndex = -1;
+    if (this.flightMode === 'waypoint') {
+      this.flightMode = 'position_hold'; // Revert to safe mode if waypoints are cleared
+    }
+  }
+
+  getWaypoints(): Waypoint[] {
+    return [...this.waypoints];
+  }
+
+  getCurrentWaypointIndex(): number {
+    return this.currentWaypointIndex;
   }
 }
