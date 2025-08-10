@@ -14,7 +14,7 @@
 ## Educational Focus
 The project emphasizes clarity: each control loop is tunable, with tooltips and structured panels to illustrate how gains influence stability, responsiveness, and overshoot.
 
-## Roadmap (example)
+## TODO 
 - [ ] Add motor dynamics & response lag
 - [ ] Implement wind & turbulence models
 - [ ] Introduce waypoint / trajectory planner
